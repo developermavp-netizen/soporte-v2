@@ -15,11 +15,7 @@ class UserController extends Controller
 {
     use HandlesImages;
 
-    public function __construct()
-    {
-        // Solo ADMIN puede gestionar usuarios
-        $this->middleware('role:ADMIN');
-    }
+    
 
     public function index(Request $request)
     {

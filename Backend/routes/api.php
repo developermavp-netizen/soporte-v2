@@ -43,9 +43,12 @@ Route::post('/orders/{id}/follow-up', [API\OrderController::class, 'saveFollowUp
 Route::post('/orders/{id}/solution', [API\OrderController::class, 'saveSolution']);
 
 // Para admin: roles
-Route::get('/roles', function() {
-    return response()->json(\App\Models\Role::all());
-});
+// Reemplazar la función anónima por:
+Route::get('/roles', [API\RoleController::class, 'index']);
+Route::get('/roles/{id}', [API\RoleController::class, 'show']);
+Route::post('/roles', [API\RoleController::class, 'store']);
+Route::put('/roles/{id}', [API\RoleController::class, 'update']);
+Route::delete('/roles/{id}', [API\RoleController::class, 'destroy']);
     // Entidades
     Route::apiResource('customers', API\CustomerController::class);
     Route::apiResource('devices', API\DeviceController::class);
@@ -76,11 +79,14 @@ Route::get('/roles', function() {
     // ============================================
     // RUTAS SOLO PARA ADMIN
     // ============================================
-    Route::middleware('role:ADMIN')->group(function() {
-        Route::apiResource('users', API\UserController::class);
-        
-        Route::get('/roles', function() {
-            return response()->json(\App\Models\Role::all());
-        });
-    });
+ // ============================================
+// RUTAS SOLO PARA ADMIN
+// ============================================
+Route::middleware(['auth:sanctum', 'role:ADMIN'])->group(function() {
+    // Usuarios - CRUD completo
+    Route::apiResource('users', API\UserController::class);
+    
+    // Roles - usando el controlador que ya creamos
+    Route::apiResource('roles', API\RoleController::class);
+});
 });

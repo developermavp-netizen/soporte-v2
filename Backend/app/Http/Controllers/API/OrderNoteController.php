@@ -36,49 +36,86 @@ class OrderNoteController extends Controller
         }
     }
 
-    public function store(Request $request)
-    {
-        try {
-            $validated = $request->validate([
-                'order_id' => 'required|exists:orders,id',
-                'note' => 'required|string',
-                'is_internal' => 'boolean',
-                'images' => 'nullable|array',
-                'images.*' => 'image|mimes:jpeg,png,jpg|max:2048'
-            ]);
-            
-            // Verificar permisos para notas internas
-            $isInternal = $validated['is_internal'] ?? false;
-            if ($isInternal && !auth()->user()->isAdmin() && !auth()->user()->isTecnico()) {
-                return response()->json(['error' => 'No tienes permiso para crear notas internas'], 403);
-            }
-
-            // Si es VENTAS, solo notas públicas
-            if (auth()->user()->isVentas()) {
-                $validated['is_internal'] = false;
-            }
-            
-            $validated['created_by'] = auth()->user()->name ?? 'Sistema';
-
-            // Subir imágenes si existen
-            if ($request->hasFile('images')) {
-                $images = [];
-                foreach ($request->file('images') as $image) {
-                    $imageData = $this->uploadImage($image, 'notes');
-                    $images[] = $imageData;
-                }
-                $validated['images'] = json_encode($images);
-            }
-            
-            $note = OrderNote::create($validated);
-            
-            return response()->json($note, Response::HTTP_CREATED);
-            
-        } catch (\Exception $error) {
-            return response()->json(['error' => $error->getMessage()], 500);
+    public function store(Request $request, $orderId = null)
+{
+    try {
+        // Convertir is_internal de string a boolean si viene de form-data
+        if ($request->has('is_internal')) {
+            $isInternal = filter_var($request->is_internal, FILTER_VALIDATE_BOOLEAN);
+            $request->merge(['is_internal' => $isInternal]);
         }
-    }
 
+        $orderId = $orderId ?? $request->order_id;
+        
+        if (!$orderId) {
+            return response()->json([
+                'error' => 'Se requiere el ID de la orden'
+            ], Response::HTTP_BAD_REQUEST);
+        }
+
+        // Validación: aceptar tanto array de imágenes como archivo individual
+        $rules = [
+            'order_id' => 'sometimes|exists:orders,id',
+            'note' => 'required|string',
+            'is_internal' => 'boolean'
+        ];
+
+        // Si viene como archivo individual (desde Postman)
+        if ($request->hasFile('images')) {
+            $rules['images'] = 'image|mimes:jpeg,png,jpg|max:5120';
+        } else {
+            // Si viene como array (desde frontend con múltiples archivos)
+            $rules['images'] = 'nullable|array';
+            $rules['images.*'] = 'image|mimes:jpeg,png,jpg|max:5120';
+        }
+
+        $validated = $request->validate($rules);
+        
+        // Verificar permisos para notas internas
+        $isInternal = $validated['is_internal'] ?? false;
+        if ($isInternal && !auth()->user()->isAdmin() && !auth()->user()->isTecnico()) {
+            return response()->json(['error' => 'No tienes permiso para crear notas internas'], 403);
+        }
+
+        // Si es VENTAS, solo notas públicas
+        if (auth()->user()->isVentas()) {
+            $validated['is_internal'] = false;
+        }
+        
+        $validated['order_id'] = $orderId;
+        $validated['created_by'] = auth()->user()->name ?? 'Sistema';
+
+        // Subir imágenes
+        $images = [];
+        
+        // Caso 1: Un solo archivo
+        if ($request->hasFile('images')) {
+            $imageData = $this->uploadImage($request->file('images'), 'notes');
+            $images[] = $imageData;
+        }
+        
+        // Caso 2: Múltiples archivos
+        if ($request->hasFile('images.*')) {
+            foreach ($request->file('images') as $image) {
+                $imageData = $this->uploadImage($image, 'notes');
+                $images[] = $imageData;
+            }
+        }
+        
+        if (!empty($images)) {
+            $validated['images'] = $images;
+        }
+        
+        $note = OrderNote::create($validated);
+        
+        return response()->json($note, Response::HTTP_CREATED);
+        
+    } catch (\Exception $error) {
+        return response()->json([
+            'error' => $error->getMessage()
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+}
     public function show($id)
     {
         try {

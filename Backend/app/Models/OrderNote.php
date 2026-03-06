@@ -12,11 +12,12 @@ class OrderNote extends Model
     protected $table = 'order_notes';
 
     protected $fillable = [
-        'order_id', 'note', 'is_internal', 'created_by'
-    ];
+    'order_id', 'note', 'is_internal', 'created_by', 'images'
+];
 
-    protected $casts = [
-        'is_internal' => 'boolean'
+      protected $casts = [
+        'images' => 'array',
+        'is_internal' => 'boolean',
     ];
 
     public function order()

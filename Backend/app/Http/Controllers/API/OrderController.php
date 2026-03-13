@@ -179,6 +179,23 @@ class OrderController extends Controller
         }
     }
 
+    public function stats()
+{
+    try {
+        $ordersByStatus = Order::select('status_id', DB::raw('count(*) as total'))
+            ->with('status')
+            ->groupBy('status_id')
+            ->get()
+            ->mapWithKeys(function($item) {
+                return [$item->status->code => $item->total];
+            });
+
+        return response()->json($ordersByStatus, Response::HTTP_OK);
+
+    } catch (\Exception $error) {
+        return response()->json(['error' => $error->getMessage()], 500);
+    }
+}
     public function update(Request $request, $id)
     {
         try {
@@ -380,85 +397,87 @@ class OrderController extends Controller
     }
 
     public function changeStatus(Request $request, $id)
-    {
-        try {
-            // Solo ADMIN y TECNICO pueden cambiar estado
-            if (!auth()->user()->isAdmin() && !auth()->user()->isTecnico()) {
-                return response()->json(['error' => 'No tienes permiso para cambiar el estado'], 403);
-            }
+{
+    try {
+        // Solo ADMIN y TECNICO pueden cambiar estado
+        if (!auth()->user()->isAdmin() && !auth()->user()->isTecnico()) {
+            return response()->json(['error' => 'No tienes permiso para cambiar el estado'], 403);
+        }
 
-            DB::beginTransaction();
-            
-            $order = Order::find($id);
-            if (!$order) {
-                return response()->json(['error' => 'Orden no encontrada'], 404);
+        DB::beginTransaction();
+        
+        $order = Order::find($id);
+        if (!$order) {
+            return response()->json(['error' => 'Orden no encontrada'], 404);
+        }
+        
+        $validated = $request->validate([
+            'status_code' => 'required|exists:statuses,code',
+            'notes' => 'nullable|string'
+        ]);
+        
+        $newStatus = \App\Models\Status::where('code', $validated['status_code'])->first();
+        $changedBy = auth()->user()->name ?? 'Sistema';
+        
+        // Validaciones específicas por estado
+        if ($validated['status_code'] === 'TERMINADO') {
+            // Validar que tenga solución
+            if (!$order->solution) {
+                return response()->json(['error' => 'No se puede cerrar la orden sin una solución'], 400);
             }
             
-            $validated = $request->validate([
-                'status_code' => 'required|exists:statuses,code',
-                'notes' => 'nullable|string',
-                // Para TERMINADO
-                'service_cost' => 'required_if:status_code,TERMINADO|numeric',
-                'payment_method' => 'required_if:status_code,TERMINADO|string',
-                'received_by' => 'required_if:status_code,TERMINADO|string',
+            // Validar datos de pago si viene TERMINADO
+            $request->validate([
+                'service_cost' => 'required|numeric',
+                'payment_method' => 'required|string',
+                'received_by' => 'required|string',
                 'delivery_notes' => 'nullable|string'
             ]);
-            
-            $newStatus = \App\Models\Status::where('code', $validated['status_code'])->first();
-            $changedBy = auth()->user()->name ?? 'Sistema';
-            
-            // Actualizar estado
-            $order->status_id = $newStatus->id;
-            $order->save();
-            
-            // Crear historial
-            OrderStatusHistory::create([
+        }
+        
+        // Actualizar estado
+        $order->status_id = $newStatus->id;
+        $order->save();
+        
+        // Crear historial
+        OrderStatusHistory::create([
+            'order_id' => $order->id,
+            'status_id' => $newStatus->id,
+            'notes' => $validated['notes'] ?? "Estado cambiado a {$newStatus->name}",
+            'changed_by' => $changedBy
+        ]);
+        
+        // Si es TERMINADO, registrar pago y entrega
+        if ($validated['status_code'] === 'TERMINADO') {
+            Payment::create([
                 'order_id' => $order->id,
-                'status_id' => $newStatus->id,
-                'notes' => $validated['notes'] ?? "Estado cambiado a {$newStatus->name}",
-                'changed_by' => $changedBy
+                'amount' => $request->service_cost,
+                'payment_method' => $request->payment_method,
+                'received_by' => $changedBy,
+                'notes' => $request->notes ?? 'Pago por servicio'
             ]);
             
-            // Si es TERMINADO, registrar pago y entrega
-            if ($validated['status_code'] === 'TERMINADO') {
-                // Validar que tenga solución
-                if (!$order->solution) {
-                    DB::rollBack();
-                    return response()->json(['error' => 'No se puede cerrar la orden sin una solución'], 400);
-                }
-
-                // Pago
-                Payment::create([
-                    'order_id' => $order->id,
-                    'amount' => $validated['service_cost'],
-                    'payment_method' => $validated['payment_method'] ?? 'EFECTIVO',
-                    'received_by' => $changedBy,
-                    'notes' => $validated['notes'] ?? 'Pago por servicio'
-                ]);
-                
-                // Entrega
-                Delivery::create([
-                    'order_id' => $order->id,
-                    'received_by' => $validated['received_by'],
-                    'notes' => $validated['delivery_notes'] ?? 'Equipo entregado',
-                    'delivered_at' => now()
-                ]);
-            }
-            
-            DB::commit();
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'Estado actualizado',
-                'order' => $order->load(['status', 'payments', 'deliveries'])
-            ], Response::HTTP_OK);
-            
-        } catch (\Exception $error) {
-            DB::rollBack();
-            return response()->json(['error' => $error->getMessage()], 500);
+            Delivery::create([
+                'order_id' => $order->id,
+                'received_by' => $request->received_by,
+                'notes' => $request->delivery_notes ?? 'Equipo entregado',
+                'delivered_at' => now()
+            ]);
         }
+        
+        DB::commit();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Estado actualizado',
+            'order' => $order->load(['status', 'payments', 'deliveries'])
+        ], Response::HTTP_OK);
+        
+    } catch (\Exception $error) {
+        DB::rollBack();
+        return response()->json(['error' => $error->getMessage()], 500);
     }
-
+}
     public function destroy($id)
     {
         try {

@@ -37,10 +37,11 @@ class DeviceTypeController extends Controller
     {
         try {
             // Validación (como express-validator)
-            $validated = $request->validate([
-                'name' => 'required|string|unique:device_types,name'
-            ]);
-            
+           $validated = $request->validate([
+    'name'               => 'required|string|max:255',
+    'requires_password'  => 'boolean',
+]);
+
             // Equivalente a: INSERT INTO device_types (name) VALUES ($1) RETURNING *
             $deviceType = DeviceType::create($validated);
             
@@ -102,7 +103,8 @@ class DeviceTypeController extends Controller
             
             // Validación (unique excepto este ID)
             $validated = $request->validate([
-                'name' => 'required|string|unique:device_types,name,' . $id
+                'name' => 'required|string|unique:device_types,name,' . $id,
+                'requires_password'  => 'boolean'
             ]);
             
             // Equivalente a: UPDATE device_types SET name = $1 WHERE id = $2

@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Order extends Model
 {
@@ -16,7 +18,7 @@ class Order extends Model
     ];
 
     protected $casts = [
-        'promised_date' => 'datetime',
+        'promised_date'  => 'datetime',
         'estimated_cost' => 'decimal:2'
     ];
 
@@ -37,39 +39,38 @@ class Order extends Model
     }
 
     // Relaciones con tablas hijas
-    public function statusHistory()
+    public function statusHistory(): HasMany
     {
         return $this->hasMany(OrderStatusHistory::class);
     }
 
-    public function notes()
+    public function notes(): HasMany
     {
         return $this->hasMany(OrderNote::class);
     }
 
-    public function repairs()
+    public function repairs(): HasMany
     {
         return $this->hasMany(Repair::class);
     }
 
-    public function payments()
+    public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
     }
 
-    public function deliveries()
+    public function deliveries(): HasMany
     {
         return $this->hasMany(Delivery::class);
     }
 
-    // Obtener último pago
-    public function lastPayment()
+    // Último pago / última entrega
+    public function lastPayment(): HasOne
     {
         return $this->hasOne(Payment::class)->latestOfMany();
     }
 
-    // Obtener última entrega
-    public function lastDelivery()
+    public function lastDelivery(): HasOne
     {
         return $this->hasOne(Delivery::class)->latestOfMany();
     }

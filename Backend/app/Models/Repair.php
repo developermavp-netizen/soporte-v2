@@ -10,15 +10,26 @@ class Repair extends Model
     use HasFactory;
 
     protected $fillable = [
-        'order_id', 'description', 'cost', 'price',
-        'warranty_days', 'is_completed', 'completed_at'
+        'order_id',
+        'description',
+        'part_model',
+        'supplier',
+        'quantity',
+        'cost',
+        'price',
+        'type',
+        'warranty_days',
+        'is_completed',
+        'completed_at',
+        'created_by',
     ];
 
     protected $casts = [
         'is_completed' => 'boolean',
         'completed_at' => 'datetime',
-        'cost' => 'decimal:2',
-        'price' => 'decimal:2'
+        'cost'         => 'decimal:2',
+        'price'        => 'decimal:2',
+        'quantity'     => 'integer',
     ];
 
     public function order()

@@ -9,11 +9,15 @@ class DeviceType extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name'];
-
+    protected $fillable = ['name', 'requires_password'];
+    protected $casts = [
+    'requires_password' => 'boolean',
+];
     // Relación: Un tipo de dispositivo tiene muchas marcas
+    
     public function brands()
     {
         return $this->hasMany(Brand::class);
     }
+    
 }
